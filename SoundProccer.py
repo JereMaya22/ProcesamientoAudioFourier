@@ -1,7 +1,7 @@
 import numpy as np
 from PySide6.QtWidgets import (QApplication, QMainWindow, QPushButton, QVBoxLayout, 
                              QWidget, QFileDialog, QMessageBox, QSlider, QLabel,
-                             QHBoxLayout, QProgressBar)
+                             QHBoxLayout, QProgressBar, QFrame, QSplitter)
 from PySide6.QtCore import QTimer
 from PySide6.QtCore import Qt
 import matplotlib.pyplot as plt
@@ -13,6 +13,10 @@ from scipy.io import wavfile
 import sounddevice as sd
 import time
 import threading
+from PySide6.QtGui import QPalette, QColor, QFont, QIcon
+from PySide6.QtCore import Qt, QSize
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
 
 # Agregar esta función antes de la clase MainWindow
 def filtrar_ruido(y, sr, umbral=5000):
@@ -161,102 +165,253 @@ class AudioPlayer:
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Procesamiento de Audio con Series de Fourier")
-        self.setGeometry(100, 100, 600, 400)
-        
         self.processor = AudioProcessor()
         self.audio_player = AudioPlayer()
         self.y_filtrado = None
         self.y_comprimido = None
-        self.currently_playing = None  # Para rastrear qué audio se está reproduciendo
-        
-        # Crear widget central y layout
-        widget_central = QWidget()
-        self.setCentralWidget(widget_central)
-        layout = QVBoxLayout(widget_central)
-        
-        # Crear widget para controles de reproducción
+        self.currently_playing = None
+
+        self.setWindowTitle("Audio Processor")
+        self.setGeometry(100, 100, 1200, 800)
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #FFFFFF;
+            }
+            QWidget {
+                background-color: #FFFFFF;
+                color: #333333;
+            }
+            QPushButton {
+                background-color: #FFFFFF;
+                border: 2px solid #333333;
+                color: #333333;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-size: 13px;
+                font-weight: bold;
+                margin: 5px;
+                text-align: left;
+            }
+            QPushButton:hover {
+                background-color: #333333;
+                color: #FFFFFF;
+            }
+            QPushButton:pressed {
+                background-color: #1a1a1a;
+            }
+            QProgressBar {
+                border: 1px solid #333333;
+                border-radius: 2px;
+                text-align: center;
+                background-color: #FFFFFF;
+            }
+            QProgressBar::chunk {
+                background-color: #333333;
+            }
+            QSlider::groove:horizontal {
+                border: 1px solid #333333;
+                height: 4px;
+                background: #FFFFFF;
+                margin: 2px 0;
+            }
+            QSlider::handle:horizontal {
+                background: #333333;
+                width: 12px;
+                margin: -4px 0;
+                border-radius: 6px;
+            }
+            QLabel {
+                color: #333333;
+                font-size: 13px;
+            }
+        """)
+
+        # Widget central principal
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        main_layout = QHBoxLayout(central_widget)
+
+        # Panel izquierdo (controles)
+        left_panel = QWidget()
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(20, 20, 20, 20)
+        left_layout.setSpacing(15)
+
+        # Título
+        title_label = QLabel("AUDIO PROCESSOR")
+        title_label.setStyleSheet("""
+            font-size: 24px;
+            font-weight: bold;
+            color: #333333;
+            padding: 10px;
+            border-bottom: 2px solid #333333;
+        """)
+        title_label.setAlignment(Qt.AlignCenter)
+        left_layout.addWidget(title_label)
+
+        # Controles de reproducción
         self.control_widget = QWidget()
-        control_layout = QHBoxLayout(self.control_widget)
+        control_layout = QVBoxLayout(self.control_widget)
         
-        self.play_pause_button = QPushButton("Play")
-        self.play_pause_button.clicked.connect(self.toggle_play_pause)
-        control_layout.addWidget(self.play_pause_button)
+        # Botones de control
+        playback_buttons = QHBoxLayout()
+        self.play_pause_button = QPushButton()
+        self.play_pause_button.setIcon(QIcon("icons/play.png"))
+        self.play_pause_button.setFixedSize(40, 40)
+        self.play_pause_button.setStyleSheet("""
+            QPushButton {
+                border-radius: 20px;
+                padding: 5px;
+            }
+        """)
+        playback_buttons.addWidget(self.play_pause_button)
+        playback_buttons.addStretch()
         
+        # Agregar barra de progreso
         self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, 100)
-        control_layout.addWidget(self.progress_bar)
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #333333;
+                border-radius: 2px;
+                text-align: center;
+                height: 8px;
+                margin: 0px 5px;
+            }
+            QProgressBar::chunk {
+                background-color: #333333;
+            }
+        """)
+        self.progress_bar.setTextVisible(False)
         
-        self.time_label = QLabel("0:00 / 0:00")
-        control_layout.addWidget(self.time_label)
-        
-        # Agregar slider para buscar en el audio
+        # Slider y tiempo
         self.seek_slider = QSlider(Qt.Horizontal)
         self.seek_slider.setRange(0, 100)
-        self.seek_slider.sliderMoved.connect(self.seek_audio)
+        self.seek_slider.sliderPressed.connect(self.on_slider_pressed)
+        self.seek_slider.sliderReleased.connect(self.on_slider_released)
+        self.seek_slider.sliderMoved.connect(self.on_slider_moved)
+        self.slider_pressed = False
+        
+        self.time_label = QLabel("0:00 / 0:00")
+        self.time_label.setAlignment(Qt.AlignRight)
+        
+        control_layout.addLayout(playback_buttons)
         control_layout.addWidget(self.seek_slider)
+        control_layout.addWidget(self.progress_bar)  # Agregar progress_bar
+        control_layout.addWidget(self.time_label)
         
-        # Ocultar controles inicialmente
-        self.control_widget.hide()
+        left_layout.addWidget(self.control_widget)
+
+        # Botones de funciones
+        boton_cargar = QPushButton(" Cargar Audio")
+        boton_cargar.setIcon(QIcon("icons/load.png"))
+        boton_filtrado = QPushButton(" Filtrar Ruido")
+        boton_filtrado.setIcon(QIcon("icons/filter.png"))
+        boton_sintesis = QPushButton(" Sintetizar")
+        boton_sintesis.setIcon(QIcon("icons/synth.png"))
+        boton_compresion = QPushButton(" Comprimir")
+        boton_compresion.setIcon(QIcon("icons/compress.png"))
+
+        left_layout.addWidget(boton_cargar)
+        left_layout.addWidget(boton_filtrado)
+        left_layout.addWidget(boton_sintesis)
+        left_layout.addWidget(boton_compresion)
+        left_layout.addStretch()
+
+        # Panel derecho (gráfica)
+        right_panel = QWidget()
+        right_layout = QVBoxLayout(right_panel)
         
-        # Agregar botón para mostrar/ocultar línea de tiempo
-        self.boton_timeline = QPushButton("Mostrar Línea de Tiempo")
-        self.boton_timeline.clicked.connect(self.toggle_timeline)
-        layout.addWidget(self.boton_timeline)
+        # Crear figura de matplotlib
+        self.figure = Figure(facecolor='white')
+        self.canvas = FigureCanvas(self.figure)
+        right_layout.addWidget(self.canvas)
         
-        # Agregar el widget de controles al layout principal
-        layout.addWidget(self.control_widget)
-        
-        # Botones de funcionalidad
-        boton_cargar = QPushButton("Cargar Audio")
-        boton_cargar.clicked.connect(self.processor.cargar_audio)
-        layout.addWidget(boton_cargar)
-        
-        boton_filtrado = QPushButton("Aplicar Filtrado de Ruido")
+        # Botón de guardar (inicialmente oculto)
+        self.save_button = QPushButton(" Guardar")
+        self.save_button.setIcon(QIcon("icons/save.png"))
+        self.save_button.hide()
+        right_layout.addWidget(self.save_button)
+
+        # Agregar paneles al layout principal
+        splitter = QSplitter(Qt.Horizontal)
+        splitter.addWidget(left_panel)
+        splitter.addWidget(right_panel)
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 2)
+        main_layout.addWidget(splitter)
+
+        # Conectar señales
+        self.play_pause_button.clicked.connect(self.toggle_play_pause)
+        boton_cargar.clicked.connect(self.cargar_audio)
         boton_filtrado.clicked.connect(self.aplicar_filtro)
-        layout.addWidget(boton_filtrado)
-        
-        boton_sintesis = QPushButton("Generar Síntesis de Sonido (440Hz)")
         boton_sintesis.clicked.connect(self.generar_sintesis)
-        layout.addWidget(boton_sintesis)
-        
-        boton_compresion = QPushButton("Aplicar Compresión de Audio")
         boton_compresion.clicked.connect(self.aplicar_compresion)
-        layout.addWidget(boton_compresion)
-        
+        self.save_button.clicked.connect(self.guardar_audio_actual)
+
         # Timer para actualizar la barra de progreso
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_progress)
-        self.timer.start(100)  # Actualizar cada 100ms
+        self.timer.start(100)
 
-    def toggle_timeline(self):
-        if self.control_widget.isHidden():
-            self.control_widget.show()
-            self.boton_timeline.setText("Ocultar Línea de Tiempo")
-        else:
-            self.control_widget.hide()
-            self.boton_timeline.setText("Mostrar Línea de Tiempo")
+    def plot_audio(self, data, title):
+        """Método para graficar en el panel derecho"""
+        self.figure.clear()
+        ax = self.figure.add_subplot(111)
+        ax.plot(data, color='#333333')
+        ax.set_title(title)
+        ax.set_xlabel('Muestras')
+        ax.set_ylabel('Amplitud')
+        ax.grid(True, linestyle='--', alpha=0.7)
+        self.canvas.draw()
+        
+        # Mostrar botón de guardar con el título correspondiente
+        self.save_button.setText(f" Guardar {title}")
+        self.save_button.show()
+
+    def guardar_audio_actual(self):
+        """Método para guardar el audio actual"""
+        if hasattr(self, 'ultimo_audio_procesado'):
+            self.preguntar_guardar(self.ultimo_audio_procesado, 
+                                 self.save_button.text().replace(" Guardar ", ""))
 
     def toggle_play_pause(self):
-        try:
-            if self.currently_playing is None:
-                QMessageBox.warning(self, "Aviso", "No hay audio para reproducir")
-                return
-                
-            if self.audio_player.playing:
-                self.audio_player.pause()
-                self.play_pause_button.setText("Play")
-            else:
-                self.audio_player.resume()
-                self.play_pause_button.setText("Pause")
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Error en reproducción: {str(e)}")
+        """Alternar entre reproducir y pausar"""
+        if self.audio_player.playing:
+            self.audio_player.pause()
+            self.play_pause_button.setIcon(QIcon("icons/play.png"))
+        else:
+            self.audio_player.resume()
+            self.play_pause_button.setIcon(QIcon("icons/pause.png"))
 
     def seek_audio(self, position):
+        """Buscar en el audio"""
         self.audio_player.seek(position / 100.0)
 
-    def update_progress(self):
+    def on_slider_pressed(self):
+        """Cuando el usuario presiona el slider"""
+        self.slider_pressed = True
+        if self.audio_player.playing:
+            self.audio_player.pause()
+
+    def on_slider_released(self):
+        """Cuando el usuario suelta el slider"""
+        self.slider_pressed = False
+        position = self.seek_slider.value() / 100.0
+        self.audio_player.seek(position)
+        if self.audio_player.playing:
+            self.audio_player.resume()
+
+    def on_slider_moved(self, position):
+        """Mientras el usuario mueve el slider"""
         if self.audio_player.audio_data is not None:
+            total_time = len(self.audio_player.audio_data) / self.audio_player.sr
+            current_time = position * total_time / 100
+            self.time_label.setText(f"{int(current_time//60)}:{int(current_time%60):02d} / "
+                                  f"{int(total_time//60)}:{int(total_time%60):02d}")
+
+    def update_progress(self):
+        """Actualizar la barra de progreso y el tiempo"""
+        if self.audio_player.audio_data is not None and not self.slider_pressed:
             progress = self.audio_player.get_progress()
             self.progress_bar.setValue(int(progress))
             self.seek_slider.setValue(int(progress))
@@ -344,25 +499,16 @@ class MainWindow(QMainWindow):
             if self.processor.y is None:
                 QMessageBox.critical(self, "Error", "Por favor, carga un archivo de audio primero")
                 return
+            
             if self.audio_player.playing:
                 self.audio_player.stop()
-                self.play_pause_button.setText("Play")
+                self.play_pause_button.setIcon(QIcon("icons/play.png"))
                 
             self.y_filtrado = filtrar_ruido(self.processor.y, self.processor.sr)
             if self.y_filtrado is not None:
-                plt.figure(figsize=(10, 4))
-                plt.plot(self.y_filtrado)
-                plt.title("Audio Filtrado")
-                plt.xlabel("Muestras")
-                plt.ylabel("Amplitud")
-                plt.grid(True)
-                plt.show()
-                
-                # Reproducir el audio filtrado
+                self.plot_audio(self.y_filtrado, "Audio Filtrado")
                 self.reproducir_audio(self.y_filtrado, self.processor.sr)
-                
-                # Preguntar si desea guardar
-                self.preguntar_guardar(self.y_filtrado, "Audio Filtrado")
+                self.ultimo_audio_procesado = self.y_filtrado
                 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error al filtrar: {str(e)}")
@@ -461,6 +607,13 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"Error al cerrar: {e}")
         event.accept()
+
+    def cargar_audio(self):
+        """Método para manejar la carga de audio"""
+        y, sr = self.processor.cargar_audio()
+        if y is not None and sr is not None:
+            self.plot_audio(y, "Audio Original")
+            self.ultimo_audio_procesado = y
 
 # Ejecutar la aplicación
 if __name__ == '__main__':
