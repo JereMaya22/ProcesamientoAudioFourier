@@ -255,13 +255,14 @@ class MainWindow(QMainWindow):
         
         # Botones de control
         playback_buttons = QHBoxLayout()
-        self.play_pause_button = QPushButton()
-        self.play_pause_button.setIcon(QIcon("icons/play.png"))
+        self.play_pause_button = QPushButton("▶")
         self.play_pause_button.setFixedSize(40, 40)
         self.play_pause_button.setStyleSheet("""
             QPushButton {
                 border-radius: 20px;
                 padding: 5px;
+                font-size: 18px;
+                font-weight: bold;
             }
         """)
         playback_buttons.addWidget(self.play_pause_button)
@@ -302,14 +303,22 @@ class MainWindow(QMainWindow):
         left_layout.addWidget(self.control_widget)
 
         # Botones de funciones
-        boton_cargar = QPushButton(" Cargar Audio")
-        boton_cargar.setIcon(QIcon("icons/load.png"))
-        boton_filtrado = QPushButton(" Filtrar Ruido")
-        boton_filtrado.setIcon(QIcon("icons/filter.png"))
-        boton_sintesis = QPushButton(" Sintetizar")
-        boton_sintesis.setIcon(QIcon("icons/synth.png"))
-        boton_compresion = QPushButton(" Comprimir")
-        boton_compresion.setIcon(QIcon("icons/compress.png"))
+        boton_cargar = QPushButton("Cargar Audio")
+        boton_filtrado = QPushButton("Filtrar Ruido")
+        boton_sintesis = QPushButton("Sintetizar")
+        boton_compresion = QPushButton("Comprimir")
+
+        # Estilo adicional para los botones de función
+        botones_estilo = """
+            QPushButton {
+                padding: 12px 20px;
+                font-size: 14px;
+                font-weight: bold;
+                text-align: center;
+            }
+        """
+        for boton in [boton_cargar, boton_filtrado, boton_sintesis, boton_compresion]:
+            boton.setStyleSheet(botones_estilo)
 
         left_layout.addWidget(boton_cargar)
         left_layout.addWidget(boton_filtrado)
@@ -378,10 +387,10 @@ class MainWindow(QMainWindow):
         """Alternar entre reproducir y pausar"""
         if self.audio_player.playing:
             self.audio_player.pause()
-            self.play_pause_button.setIcon(QIcon("icons/play.png"))
+            self.play_pause_button.setText("▶")
         else:
             self.audio_player.resume()
-            self.play_pause_button.setIcon(QIcon("icons/pause.png"))
+            self.play_pause_button.setText("||")
 
     def seek_audio(self, position):
         """Buscar en el audio"""
@@ -445,13 +454,12 @@ class MainWindow(QMainWindow):
     def reproducir_audio(self, datos, sr):
         try:
             if datos is not None and sr is not None:
-                # Detener reproducción actual si existe
                 if self.audio_player.playing:
                     self.audio_player.stop()
-                    self.play_pause_button.setText("Play")
+                    self.play_pause_button.setText("▶")
                 
                 self.audio_player.play(datos, sr)
-                self.play_pause_button.setText("Pause")
+                self.play_pause_button.setText("||")
                 self.currently_playing = datos
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error al reproducir: {str(e)}")
@@ -502,7 +510,7 @@ class MainWindow(QMainWindow):
             
             if self.audio_player.playing:
                 self.audio_player.stop()
-                self.play_pause_button.setIcon(QIcon("icons/play.png"))
+                self.play_pause_button.setText("▶")
                 
             self.y_filtrado = filtrar_ruido(self.processor.y, self.processor.sr)
             if self.y_filtrado is not None:
@@ -517,7 +525,7 @@ class MainWindow(QMainWindow):
         try:
             if self.audio_player.playing:
                 self.audio_player.stop()
-                self.play_pause_button.setText("Play")
+                self.play_pause_button.setText("▶")
                 
             y_sintetizado, sr_sintetizado = sintetizar_sonido(frecuencia=440)
             plt.plot(y_sintetizado)
@@ -540,7 +548,7 @@ class MainWindow(QMainWindow):
                 return
             if self.audio_player.playing:
                 self.audio_player.stop()
-                self.play_pause_button.setText("Play")
+                self.play_pause_button.setText("▶")
                 
             # Calcular la FFT y aplicar compresión
             fft_data = fft(self.processor.y)
