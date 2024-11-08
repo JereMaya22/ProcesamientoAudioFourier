@@ -1,25 +1,31 @@
 import numpy as np
 from PySide6.QtWidgets import (QApplication, QMainWindow, QPushButton, QVBoxLayout, 
                              QWidget, QFileDialog, QMessageBox, QSlider, QLabel,
-                             QHBoxLayout, QProgressBar, QFrame, QSplitter)
+                             QHBoxLayout, QProgressBar, QFrame, QSplitter, QSizePolicy)
 from PySide6.QtCore import QTimer
 from PySide6.QtCore import Qt
-import matplotlib.pyplot as plt
 from scipy.fft import fft, ifft, fftfreq
-import wave
-import struct
 import sys
 from scipy.io import wavfile
 import sounddevice as sd
-import time
-import threading
-from PySide6.QtGui import QPalette, QColor, QFont, QIcon
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtGui import QIcon
+from PySide6.QtCore import Qt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
 # Función para filtrar ruido de una señal de audio usando FFT
 def filtrar_ruido(y, sr, umbral=5000):
+    """
+    Esta función se encarga de limpiar el ruido de una señal de audio.
+    Usa la transformada de Fourier para convertir la señal al dominio de frecuencia,
+    elimina las frecuencias por encima del umbral (que normalmente es ruido),
+    y vuelve a convertir la señal al dominio del tiempo.
+    
+    Parámetros:
+    - y: señal de audio
+    - sr: frecuencia de muestreo
+    - umbral: frecuencia de corte para el filtro (por defecto 5000 Hz)
+    """
     if y is None:
         return None
         
@@ -37,6 +43,15 @@ def filtrar_ruido(y, sr, umbral=5000):
 
 # Función para sintetizar un sonido de una frecuencia específica
 def sintetizar_sonido(frecuencia, duracion=2, sr=44100):
+    """
+    Genera un tono puro usando una onda sinusoidal.
+    Útil para pruebas y para entender cómo se genera el sonido digitalmente.
+    
+    Parámetros:
+    - frecuencia: frecuencia del tono en Hz
+    - duracion: duración en segundos
+    - sr: frecuencia de muestreo (calidad del audio)
+    """
     t = np.linspace(0, duracion, int(sr * duracion), endpoint=False)
     y_sintetizado = 0.5 * np.sin(2 * np.pi * frecuencia * t)
     return y_sintetizado, sr
@@ -54,12 +69,27 @@ def comprimir_audio(y, porcentaje=50):
 
 # Clase para procesar archivos de audio
 class AudioProcessor:
+    """
+    Clase principal para el procesamiento de archivos de audio.
+    Maneja la carga y procesamiento básico de archivos WAV.
+    """
+    
     def __init__(self):
+        """
+        Inicializa las variables necesarias para el procesador de audio.
+        y: datos de audio
+        sr: frecuencia de muestreo
+        """
         self.y = None
         self.sr = None
 
     # Método para cargar un archivo de audio WAV
     def cargar_audio(self):
+        """
+        Abre un diálogo para seleccionar y cargar un archivo WAV.
+        Normaliza el audio y lo convierte a mono si es necesario.
+        Muestra mensajes de éxito o error según corresponda.
+        """
         try:
             archivo_audio, _ = QFileDialog.getOpenFileName(
                 None, 
@@ -91,7 +121,16 @@ class AudioProcessor:
 
 # Clase para reproducir audio
 class AudioPlayer:
+    """
+    Maneja la reproducción del audio usando sounddevice.
+    Implementa controles básicos como play, pause, stop y seek.
+    """
+    
     def __init__(self):
+        """
+        Inicializa el reproductor con valores por defecto y 
+        prepara el sistema de streaming de audio.
+        """
         self.playing = False
         self.current_position = 0
         self.audio_data = None
@@ -100,6 +139,14 @@ class AudioPlayer:
         
     # Método para iniciar la reproducción
     def play(self, data, sr):
+        """
+        Inicia la reproducción del audio.
+        Detiene cualquier reproducción anterior si existe.
+        
+        Parámetros:
+        - data: datos de audio a reproducir
+        - sr: frecuencia de muestreo
+        """
         try:
             # Detener reproducción anterior si existe
             if self.stream is not None:
@@ -174,7 +221,16 @@ class AudioPlayer:
 
 # Clase principal de la interfaz gráfica
 class MainWindow(QMainWindow):
+    """
+    Ventana principal de la aplicación.
+    Integra todos los componentes y maneja la interfaz gráfica.
+    """
+    
     def __init__(self):
+        """
+        Configura la interfaz gráfica principal.
+        Inicializa todos los componentes, estilos y conexiones.
+        """
         super().__init__()
         
         # Definir símbolos como constantes de clase
@@ -188,10 +244,22 @@ class MainWindow(QMainWindow):
         self.y_comprimido = None
         self.currently_playing = None
 
-        # Configuración de la ventana principal
-        self.setWindowTitle("Audio Processor")
-        self.setGeometry(100, 100, 1200, 800)
+        # Obtener el tamaño de la pantalla
+        screen = QApplication.primaryScreen().geometry()
+        width = int(screen.width() * 0.8)  # 80% del ancho de la pantalla
+        height = int(screen.height() * 0.8)  # 80% del alto de la pantalla
         
+        # Configurar el tamaño inicial de la ventana
+        self.setGeometry(
+            (screen.width() - width) // 2,  # Centrar horizontalmente
+            (screen.height() - height) // 2,  # Centrar verticalmente
+            width,
+            height
+        )
+        
+        # Configurar tamaño mínimo para evitar problemas de visualización
+        self.setMinimumSize(800, 600)
+
         # Estilos CSS para la interfaz
         self.setStyleSheet("""
             QMainWindow {
@@ -367,9 +435,27 @@ class MainWindow(QMainWindow):
         splitter = QSplitter(Qt.Horizontal)
         splitter.addWidget(left_panel)
         splitter.addWidget(right_panel)
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 2)
+        splitter.setStretchFactor(0, 1)  # Panel izquierdo
+        splitter.setStretchFactor(1, 3)  # Panel derecho (más espacio para gráficas)
         main_layout.addWidget(splitter)
+
+        # Ajustar tamaños mínimos de los paneles
+        left_panel.setMinimumWidth(int(width * 0.25))  # 25% del ancho mínimo
+        right_panel.setMinimumWidth(int(width * 0.5))  # 50% del ancho mínimo
+        
+        # Hacer que los botones se ajusten al ancho del panel
+        for boton in [boton_cargar, boton_filtrado, boton_sintesis, boton_compresion]:
+            boton.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            
+        # Ajustar el tamaño del botón de reproducción
+        button_size = int(min(width, height) * 0.05)  # 5% del menor lado
+        self.play_pause_button.setFixedSize(button_size, button_size)
+        
+        # Ajustar el tamaño de la figura de matplotlib
+        self.figure.set_size_inches(width/100, height/100)
+        
+        # Hacer que el canvas se ajuste al contenedor
+        self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         # Conexión de señales
         self.play_pause_button.clicked.connect(self.toggle_play_pause)
@@ -386,6 +472,14 @@ class MainWindow(QMainWindow):
 
     # Método para graficar audio
     def plot_audio(self, data, title):
+        """
+        Grafica los datos de audio en el panel derecho.
+        Actualiza el botón de guardar según el tipo de audio.
+        
+        Parámetros:
+        - data: datos a graficar
+        - title: título de la gráfica
+        """
         """Método para graficar en el panel derecho"""
         self.figure.clear()
         ax = self.figure.add_subplot(111)
@@ -652,8 +746,27 @@ class MainWindow(QMainWindow):
             self.plot_audio(y, "Audio Original")
             self.ultimo_audio_procesado = y
 
+    def resizeEvent(self, event):
+        """Manejar el redimensionamiento de la ventana"""
+        super().resizeEvent(event)
+        
+        # Actualizar el tamaño de los elementos cuando se redimensiona la ventana
+        width = self.width()
+        height = self.height()
+        
+        # Ajustar el tamaño del botón de reproducción
+        button_size = int(min(width, height) * 0.05)
+        self.play_pause_button.setFixedSize(button_size, button_size)
+        
+        # Redibujar el canvas de matplotlib
+        self.canvas.draw()
+
 # Punto de entrada de la aplicación
 if __name__ == '__main__':
+    """
+    Inicia la aplicación Qt y muestra la ventana principal.
+    El programa se ejecutará hasta que se cierre la ventana.
+    """
     app = QApplication(sys.argv)
     ventana = MainWindow()
     ventana.show()
