@@ -18,7 +18,7 @@ from PySide6.QtCore import Qt, QSize
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
-# Agregar esta función antes de la clase MainWindow
+# Función para filtrar ruido de una señal de audio usando FFT
 def filtrar_ruido(y, sr, umbral=5000):
     if y is None:
         return None
@@ -35,11 +35,13 @@ def filtrar_ruido(y, sr, umbral=5000):
     y_filtrado = ifft(fft_y).real
     return y_filtrado
 
+# Función para sintetizar un sonido de una frecuencia específica
 def sintetizar_sonido(frecuencia, duracion=2, sr=44100):
     t = np.linspace(0, duracion, int(sr * duracion), endpoint=False)
     y_sintetizado = 0.5 * np.sin(2 * np.pi * frecuencia * t)
     return y_sintetizado, sr
 
+# Función para comprimir audio eliminando componentes de frecuencia
 def comprimir_audio(y, porcentaje=50):
     if y is None:
         return None
@@ -50,11 +52,13 @@ def comprimir_audio(y, porcentaje=50):
     y_comprimido = ifft(fft_y).real
     return y_comprimido
 
+# Clase para procesar archivos de audio
 class AudioProcessor:
     def __init__(self):
         self.y = None
         self.sr = None
 
+    # Método para cargar un archivo de audio WAV
     def cargar_audio(self):
         try:
             archivo_audio, _ = QFileDialog.getOpenFileName(
@@ -85,8 +89,7 @@ class AudioProcessor:
             QMessageBox.critical(None, "Error", f"Error inesperado: {str(e)}")
             return None, None
 
-# ... (mantener las funciones de procesamiento de audio sin cambios) ...
-
+# Clase para reproducir audio
 class AudioPlayer:
     def __init__(self):
         self.playing = False
@@ -95,6 +98,7 @@ class AudioPlayer:
         self.sr = None
         self.stream = None
         
+    # Método para iniciar la reproducción
     def play(self, data, sr):
         try:
             # Detener reproducción anterior si existe
@@ -111,6 +115,7 @@ class AudioPlayer:
             print(f"Error al iniciar reproducción: {e}")
             self.stop()
             
+    # Método para detener la reproducción
     def stop(self):
         self.playing = False
         if self.stream is not None:
@@ -123,6 +128,7 @@ class AudioPlayer:
                 self.stream = None
         self.current_position = 0
             
+    # Método para pausar la reproducción
     def pause(self):
         self.playing = False
         if self.stream:
@@ -131,6 +137,7 @@ class AudioPlayer:
             except Exception as e:
                 print(f"Error al pausar: {e}")
             
+    # Método para reanudar la reproducción
     def resume(self):
         if self.audio_data is not None and self.stream:
             try:
@@ -140,6 +147,7 @@ class AudioPlayer:
                 print(f"Error al resumir: {e}")
                 self.stop()
 
+    # Callback para el stream de audio
     def callback(self, outdata, frames, time, status):
         if self.playing and self.current_position < len(self.audio_data):
             chunk = self.audio_data[self.current_position:self.current_position + frames]
@@ -154,25 +162,37 @@ class AudioPlayer:
             outdata.fill(0)
             self.playing = False
             
+    # Método para buscar una posición en el audio
     def seek(self, position):
         self.current_position = int(position * len(self.audio_data))
         
+    # Método para obtener el progreso actual
     def get_progress(self):
         if self.audio_data is None:
             return 0
         return self.current_position / len(self.audio_data) * 100
 
+# Clase principal de la interfaz gráfica
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        
+        # Definir símbolos como constantes de clase
+        self.PLAY_SYMBOL = "▶"
+        self.PAUSE_SYMBOL = "❚❚"
+        
+        # Inicializar processor y audio_player
         self.processor = AudioProcessor()
         self.audio_player = AudioPlayer()
         self.y_filtrado = None
         self.y_comprimido = None
         self.currently_playing = None
 
+        # Configuración de la ventana principal
         self.setWindowTitle("Audio Processor")
         self.setGeometry(100, 100, 1200, 800)
+        
+        # Estilos CSS para la interfaz
         self.setStyleSheet("""
             QMainWindow {
                 background-color: #FFFFFF;
@@ -226,18 +246,18 @@ class MainWindow(QMainWindow):
             }
         """)
 
-        # Widget central principal
+        # Configuración del widget central y layouts
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QHBoxLayout(central_widget)
 
-        # Panel izquierdo (controles)
+        # Panel izquierdo para controles
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(20, 20, 20, 20)
         left_layout.setSpacing(15)
 
-        # Título
+        # Título de la aplicación
         title_label = QLabel("AUDIO PROCESSOR")
         title_label.setStyleSheet("""
             font-size: 24px;
@@ -249,11 +269,11 @@ class MainWindow(QMainWindow):
         title_label.setAlignment(Qt.AlignCenter)
         left_layout.addWidget(title_label)
 
-        # Controles de reproducción
+        # Widget de controles de reproducción
         self.control_widget = QWidget()
         control_layout = QVBoxLayout(self.control_widget)
         
-        # Botones de control
+        # Botones de control de reproducción
         playback_buttons = QHBoxLayout()
         self.play_pause_button = QPushButton("▶")
         self.play_pause_button.setFixedSize(40, 40)
@@ -268,7 +288,7 @@ class MainWindow(QMainWindow):
         playback_buttons.addWidget(self.play_pause_button)
         playback_buttons.addStretch()
         
-        # Agregar barra de progreso
+        # Barra de progreso
         self.progress_bar = QProgressBar()
         self.progress_bar.setStyleSheet("""
             QProgressBar {
@@ -284,7 +304,7 @@ class MainWindow(QMainWindow):
         """)
         self.progress_bar.setTextVisible(False)
         
-        # Slider y tiempo
+        # Slider y etiqueta de tiempo
         self.seek_slider = QSlider(Qt.Horizontal)
         self.seek_slider.setRange(0, 100)
         self.seek_slider.sliderPressed.connect(self.on_slider_pressed)
@@ -295,20 +315,21 @@ class MainWindow(QMainWindow):
         self.time_label = QLabel("0:00 / 0:00")
         self.time_label.setAlignment(Qt.AlignRight)
         
+        # Agregar widgets al layout de control
         control_layout.addLayout(playback_buttons)
         control_layout.addWidget(self.seek_slider)
-        control_layout.addWidget(self.progress_bar)  # Agregar progress_bar
+        control_layout.addWidget(self.progress_bar)
         control_layout.addWidget(self.time_label)
         
         left_layout.addWidget(self.control_widget)
 
-        # Botones de funciones
+        # Botones de funciones principales
         boton_cargar = QPushButton("Cargar Audio")
         boton_filtrado = QPushButton("Filtrar Ruido")
         boton_sintesis = QPushButton("Sintetizar")
         boton_compresion = QPushButton("Comprimir")
 
-        # Estilo adicional para los botones de función
+        # Estilo adicional para botones
         botones_estilo = """
             QPushButton {
                 padding: 12px 20px;
@@ -320,28 +341,29 @@ class MainWindow(QMainWindow):
         for boton in [boton_cargar, boton_filtrado, boton_sintesis, boton_compresion]:
             boton.setStyleSheet(botones_estilo)
 
+        # Agregar botones al panel izquierdo
         left_layout.addWidget(boton_cargar)
         left_layout.addWidget(boton_filtrado)
         left_layout.addWidget(boton_sintesis)
         left_layout.addWidget(boton_compresion)
         left_layout.addStretch()
 
-        # Panel derecho (gráfica)
+        # Panel derecho para gráficas
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
         
-        # Crear figura de matplotlib
+        # Configuración de matplotlib
         self.figure = Figure(facecolor='white')
         self.canvas = FigureCanvas(self.figure)
         right_layout.addWidget(self.canvas)
         
-        # Botón de guardar (inicialmente oculto)
+        # Botón de guardar
         self.save_button = QPushButton(" Guardar")
         self.save_button.setIcon(QIcon("icons/save.png"))
         self.save_button.hide()
         right_layout.addWidget(self.save_button)
 
-        # Agregar paneles al layout principal
+        # Configuración del splitter y layout principal
         splitter = QSplitter(Qt.Horizontal)
         splitter.addWidget(left_panel)
         splitter.addWidget(right_panel)
@@ -349,7 +371,7 @@ class MainWindow(QMainWindow):
         splitter.setStretchFactor(1, 2)
         main_layout.addWidget(splitter)
 
-        # Conectar señales
+        # Conexión de señales
         self.play_pause_button.clicked.connect(self.toggle_play_pause)
         boton_cargar.clicked.connect(self.cargar_audio)
         boton_filtrado.clicked.connect(self.aplicar_filtro)
@@ -357,11 +379,12 @@ class MainWindow(QMainWindow):
         boton_compresion.clicked.connect(self.aplicar_compresion)
         self.save_button.clicked.connect(self.guardar_audio_actual)
 
-        # Timer para actualizar la barra de progreso
+        # Timer para actualizar progreso
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_progress)
         self.timer.start(100)
 
+    # Método para graficar audio
     def plot_audio(self, data, title):
         """Método para graficar en el panel derecho"""
         self.figure.clear()
@@ -373,37 +396,43 @@ class MainWindow(QMainWindow):
         ax.grid(True, linestyle='--', alpha=0.7)
         self.canvas.draw()
         
-        # Mostrar botón de guardar con el título correspondiente
-        self.save_button.setText(f" Guardar {title}")
+        # Actualizar el botón de guardar según el tipo de audio
+        if "Sintetizado" in title:
+            self.save_button.setText("Guardar Audio Sintetizado")
+        elif "Comprimido" in title:
+            self.save_button.setText("Guardar Audio Comprimido")
+        elif "Filtrado" in title:
+            self.save_button.setText("Guardar Audio Filtrado")
+        else:
+            self.save_button.setText("Guardar Audio")
         self.save_button.show()
 
+    # Método para guardar el audio actual
     def guardar_audio_actual(self):
-        """Método para guardar el audio actual"""
         if hasattr(self, 'ultimo_audio_procesado'):
             self.preguntar_guardar(self.ultimo_audio_procesado, 
                                  self.save_button.text().replace(" Guardar ", ""))
 
+    # Método para alternar reproducción/pausa
     def toggle_play_pause(self):
-        """Alternar entre reproducir y pausar"""
         if self.audio_player.playing:
             self.audio_player.pause()
-            self.play_pause_button.setText("▶")
+            self.play_pause_button.setText(self.PLAY_SYMBOL)
         else:
             self.audio_player.resume()
-            self.play_pause_button.setText("||")
+            self.play_pause_button.setText(self.PAUSE_SYMBOL)
 
+    # Método para buscar en el audio
     def seek_audio(self, position):
-        """Buscar en el audio"""
         self.audio_player.seek(position / 100.0)
 
+    # Métodos para manejar eventos del slider
     def on_slider_pressed(self):
-        """Cuando el usuario presiona el slider"""
         self.slider_pressed = True
         if self.audio_player.playing:
             self.audio_player.pause()
 
     def on_slider_released(self):
-        """Cuando el usuario suelta el slider"""
         self.slider_pressed = False
         position = self.seek_slider.value() / 100.0
         self.audio_player.seek(position)
@@ -411,15 +440,14 @@ class MainWindow(QMainWindow):
             self.audio_player.resume()
 
     def on_slider_moved(self, position):
-        """Mientras el usuario mueve el slider"""
         if self.audio_player.audio_data is not None:
             total_time = len(self.audio_player.audio_data) / self.audio_player.sr
             current_time = position * total_time / 100
             self.time_label.setText(f"{int(current_time//60)}:{int(current_time%60):02d} / "
                                   f"{int(total_time//60)}:{int(total_time%60):02d}")
 
+    # Método para actualizar la barra de progreso
     def update_progress(self):
-        """Actualizar la barra de progreso y el tiempo"""
         if self.audio_player.audio_data is not None and not self.slider_pressed:
             progress = self.audio_player.get_progress()
             self.progress_bar.setValue(int(progress))
@@ -430,6 +458,7 @@ class MainWindow(QMainWindow):
             self.time_label.setText(f"{int(current_time//60)}:{int(current_time%60):02d} / "
                                   f"{int(total_time//60)}:{int(total_time%60):02d}")
 
+    # Método para guardar audio
     def guardar_audio(self):
         if not hasattr(self, 'ultimo_audio_procesado') or self.ultimo_audio_procesado is None:
             QMessageBox.warning(self, "Advertencia", "No hay audio procesado para guardar")
@@ -444,40 +473,42 @@ class MainWindow(QMainWindow):
         
         if archivo_guardar:
             try:
-                # Normalizar y convertir a int16
                 audio_normalizado = np.int16(self.ultimo_audio_procesado * 32767)
                 wavfile.write(archivo_guardar, self.processor.sr, audio_normalizado)
                 QMessageBox.information(self, "Éxito", "Audio guardado correctamente")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Error al guardar el archivo: {str(e)}")
 
+    # Método para reproducir audio
     def reproducir_audio(self, datos, sr):
         try:
             if datos is not None and sr is not None:
                 if self.audio_player.playing:
                     self.audio_player.stop()
-                    self.play_pause_button.setText("▶")
+                    self.play_pause_button.setText(self.PLAY_SYMBOL)
                 
                 self.audio_player.play(datos, sr)
-                self.play_pause_button.setText("||")
+                self.play_pause_button.setText(self.PAUSE_SYMBOL)
                 self.currently_playing = datos
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error al reproducir: {str(e)}")
 
+    # Método para reproducir audio original
     def reproducir_original(self):
         if self.processor.y is None:
             QMessageBox.critical(self, "Error", "Por favor, carga un archivo de audio primero")
             return
         self.reproducir_audio(self.processor.y, self.processor.sr)
 
+    # Método para reproducir audio filtrado
     def reproducir_filtrado(self):
         if self.y_filtrado is None:
             QMessageBox.critical(self, "Error", "Por favor, aplica un filtro primero")
             return
         self.reproducir_audio(self.y_filtrado, self.processor.sr)
 
+    # Método para preguntar si guardar audio
     def preguntar_guardar(self, audio_modificado, titulo):
-        """Función auxiliar para preguntar si se quiere guardar el audio"""
         respuesta = QMessageBox.question(
             self,
             "Guardar Audio",
@@ -495,13 +526,13 @@ class MainWindow(QMainWindow):
             
             if archivo_guardar:
                 try:
-                    # Normalizar y convertir a int16
                     audio_normalizado = np.int16(audio_modificado * 32767)
                     wavfile.write(archivo_guardar, self.processor.sr, audio_normalizado)
                     QMessageBox.information(self, "Éxito", f"{titulo} guardado correctamente")
                 except Exception as e:
                     QMessageBox.critical(self, "Error", f"Error al guardar el archivo: {str(e)}")
 
+    # Método para aplicar filtro de ruido
     def aplicar_filtro(self):
         try:
             if self.processor.y is None:
@@ -521,26 +552,24 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error al filtrar: {str(e)}")
 
+    # Método para generar síntesis de audio
     def generar_sintesis(self):
         try:
             if self.audio_player.playing:
                 self.audio_player.stop()
-                self.play_pause_button.setText("▶")
+                self.play_pause_button.setText(self.PLAY_SYMBOL)
                 
             y_sintetizado, sr_sintetizado = sintetizar_sonido(frecuencia=440)
-            plt.plot(y_sintetizado)
-            plt.title("Sonido Sintetizado (440Hz)")
-            plt.show()
             
-            # Reproducir el sonido sintetizado
+            # Usar el método plot_audio para mostrar en la ventana principal
+            self.plot_audio(y_sintetizado, "Sonido Sintetizado (440Hz)")
             self.reproducir_audio(y_sintetizado, sr_sintetizado)
-            
-            # Preguntar si desea guardar
-            self.preguntar_guardar(y_sintetizado, "Sonido Sintetizado")
+            self.ultimo_audio_procesado = y_sintetizado
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error en síntesis: {str(e)}")
 
+    # Método para aplicar compresión de audio
     def aplicar_compresion(self):
         try:
             if self.processor.y is None:
@@ -548,65 +577,65 @@ class MainWindow(QMainWindow):
                 return
             if self.audio_player.playing:
                 self.audio_player.stop()
-                self.play_pause_button.setText("▶")
+                self.play_pause_button.setText(self.PLAY_SYMBOL)
                 
-            # Calcular la FFT y aplicar compresión
+            # Calcular FFT y aplicar compresión
             fft_data = fft(self.processor.y)
             frecuencias = fftfreq(len(self.processor.y), 1/self.processor.sr)
             
-            # Crear una figura con dos subplots
-            plt.figure(figsize=(12, 8))
-            
-            # Graficar espectro original
-            plt.subplot(2, 2, 1)
-            plt.plot(frecuencias[:len(frecuencias)//2], np.abs(fft_data)[:len(frecuencias)//2])
-            plt.title("Espectro Original")
-            plt.xlabel("Frecuencia (Hz)")
-            plt.ylabel("Magnitud")
-            
-            # Aplicar compresión en el dominio de la frecuencia
-            umbral = int(len(fft_data) * 50 / 100)  # 50% de compresión
+            # Aplicar compresión
+            umbral = int(len(fft_data) * 50 / 100)
             fft_comprimido = fft_data.copy()
             fft_comprimido[umbral:-umbral] = 0
-            
-            # Graficar espectro comprimido
-            plt.subplot(2, 2, 2)
-            plt.plot(frecuencias[:len(frecuencias)//2], np.abs(fft_comprimido)[:len(frecuencias)//2])
-            plt.title("Espectro Comprimido")
-            plt.xlabel("Frecuencia (Hz)")
-            plt.ylabel("Magnitud")
-            
-            # Convertir de vuelta al dominio del tiempo
             y_comprimido = ifft(fft_comprimido).real
             
-            # Graficar señal original
-            plt.subplot(2, 2, 3)
-            plt.plot(self.processor.y)
-            plt.title("Señal Original")
-            plt.xlabel("Muestras")
-            plt.ylabel("Amplitud")
+            # Mostrar en la ventana principal
+            self.figure.clear()
             
-            # Graficar señal comprimida
-            plt.subplot(2, 2, 4)
-            plt.plot(y_comprimido)
-            plt.title("Señal Comprimida")
-            plt.xlabel("Muestras")
-            plt.ylabel("Amplitud")
+            # Crear subplots en la figura principal
+            gs = self.figure.add_gridspec(2, 2)
+            ax1 = self.figure.add_subplot(gs[0, 0])
+            ax2 = self.figure.add_subplot(gs[0, 1])
+            ax3 = self.figure.add_subplot(gs[1, 0])
+            ax4 = self.figure.add_subplot(gs[1, 1])
             
-            plt.tight_layout()
-            plt.show()
+            # Graficar espectros y señales
+            ax1.plot(frecuencias[:len(frecuencias)//2], np.abs(fft_data)[:len(frecuencias)//2])
+            ax1.set_title("Espectro Original")
+            ax1.set_xlabel("Frecuencia (Hz)")
+            ax1.set_ylabel("Magnitud")
             
-            # Reproducir audio comprimido
+            ax2.plot(frecuencias[:len(frecuencias)//2], np.abs(fft_comprimido)[:len(frecuencias)//2])
+            ax2.set_title("Espectro Comprimido")
+            ax2.set_xlabel("Frecuencia (Hz)")
+            ax2.set_ylabel("Magnitud")
+            
+            ax3.plot(self.processor.y)
+            ax3.set_title("Señal Original")
+            ax3.set_xlabel("Muestras")
+            ax3.set_ylabel("Amplitud")
+            
+            ax4.plot(y_comprimido)
+            ax4.set_title("Señal Comprimida")
+            ax4.set_xlabel("Muestras")
+            ax4.set_ylabel("Amplitud")
+            
+            self.figure.tight_layout()
+            self.canvas.draw()
+            
+            # Reproducir y preparar para guardar
             self.reproducir_audio(y_comprimido, self.processor.sr)
+            self.ultimo_audio_procesado = y_comprimido
             
-            # Preguntar si desea guardar
-            self.preguntar_guardar(y_comprimido, "Audio Comprimido")
+            # Actualizar el botón de guardar
+            self.save_button.setText("Guardar Audio Comprimido")
+            self.save_button.show()
             
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error en compresión: {str(e)}")
 
+    # Método para manejar el cierre de la aplicación
     def closeEvent(self, event):
-        """Manejo limpio del cierre de la aplicación"""
         try:
             if self.audio_player:
                 self.audio_player.stop()
@@ -616,16 +645,16 @@ class MainWindow(QMainWindow):
             print(f"Error al cerrar: {e}")
         event.accept()
 
+    # Método para cargar audio
     def cargar_audio(self):
-        """Método para manejar la carga de audio"""
         y, sr = self.processor.cargar_audio()
         if y is not None and sr is not None:
             self.plot_audio(y, "Audio Original")
             self.ultimo_audio_procesado = y
 
-# Ejecutar la aplicación
+# Punto de entrada de la aplicación
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     ventana = MainWindow()
     ventana.show()
-    sys.exit(app.exec())  # Nota: en PySide6 es exec() en lugar de exec_()
+    sys.exit(app.exec())  
